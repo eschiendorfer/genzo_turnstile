@@ -18,6 +18,7 @@ class Genzo_Turnstile extends Module
     private $turnstile_site_key;
     private $turnstile_secret_key;
     private $turnstile_if_logged;
+    private $turnstile_controllers;
 
 	function __construct() {
 		$this->name = 'genzo_turnstile';
@@ -38,6 +39,8 @@ class Genzo_Turnstile extends Module
         $this->turnstile_site_key = Configuration::get('GENZO_TURNSTILE_SITE_KEY');
         $this->turnstile_secret_key = Configuration::get('GENZO_TURNSTILE_SECRET_KEY');
         $this->turnstile_if_logged = Configuration::get('GENZO_TURNSTILE_IF_LOGGED');
+
+        $this->setControllerRules();
 	}
 
 	public function install() {
@@ -67,6 +70,18 @@ class Genzo_Turnstile extends Module
     }
 
     private function renderSettingsForm() {
+
+        // Get Submits in correct form
+        $turnstileSubmits = [];
+        foreach ($this->turnstile_controllers as $controller) {
+            foreach ($controller as $submitName => $turnstileAction) {
+                $turnstileSubmits[] = [
+                    'submit_name' => $submitName,
+                    'turnstile_action' => $turnstileAction.' (submit: '.$submitName.')'
+                ];
+            }
+        }
+
         $fieldsForm[0]['form'] = [
             'legend' => [
                 'title' => $this->l('Cloudflare Turnstile Settings'),
@@ -105,7 +120,17 @@ class Genzo_Turnstile extends Module
                             'label' => $this->l('No')
                         )
                     ),
-                ]
+                ],
+                [
+                    'type'   => 'checkbox',
+                    'label'  => $this->l('Active Submits'),
+                    'name'   => 'turnstile_submits',
+                    'values' => [
+                        'query' => $turnstileSubmits,
+                        'id'    => 'submit_name',
+                        'name'  => 'turnstile_action',
+                    ],
+                ],
             ],
             'submit' => [
                 'title' => $this->l('Save'),
@@ -124,13 +149,32 @@ class Genzo_Turnstile extends Module
             'turnstile_if_logged' => Configuration::get('GENZO_TURNSTILE_IF_LOGGED'),
         ];
 
+        if (!empty($turnstileSubmitsValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS')))) {
+            foreach ($turnstileSubmitsValues as $submitName) {
+                $helper->fields_value['turnstile_submits_'.$submitName] = true;
+            }
+        }
+
         return $helper->generateForm($fieldsForm);
     }
 
     private function saveTurnstileSettings() {
+
+        $turnstileSubmitsActive = [];
+
+        foreach ($this->turnstile_controllers as $controller) {
+            foreach ($controller as $submitName => $turnstileAction) {
+                $inputName = 'turnstile_submits_'.$submitName;
+                if (Tools::getValue($inputName)) {
+                    $turnstileSubmitsActive[] = $submitName;
+                }
+            }
+        }
+
         return Configuration::updateValue('GENZO_TURNSTILE_SITE_KEY', Tools::getValue('turnstile_site_key')) &&
             Configuration::updateValue('GENZO_TURNSTILE_SECRET_KEY', Tools::getValue('turnstile_secret_key')) &&
-            Configuration::updateValue('GENZO_TURNSTILE_IF_LOGGED', Tools::getValue('turnstile_if_logged'));
+            Configuration::updateValue('GENZO_TURNSTILE_IF_LOGGED', Tools::getValue('turnstile_if_logged')) &&
+            Configuration::updateValue('GENZO_TURNSTILE_SUBMITS', implode(',', $turnstileSubmitsActive));
     }
 
     //Hooks
@@ -164,15 +208,39 @@ class Genzo_Turnstile extends Module
             return false;
         }
 
-        // Check any controller
-        if ($this->context->controller instanceof ContactController) {
-            return ['submitMessage' => 'ContactForm'];
-        }
-        elseif ($this->context->controller instanceof AuthController) {
-            return ['SubmitLogin' => 'Login'];
+        // Get active submits (BO configuration)
+        $turnstileSubmitsValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS'));
+
+        foreach ($this->turnstile_controllers as $instance => $submitsToCheck) {
+
+            // Check the current controller (has it any possible validation)
+            if ($this->context->controller instanceof $instance) {
+                $submitsActive = [];
+
+                // Check if the current controller has any active validations
+                foreach ($submitsToCheck as $submitName => $turnstileAction) {
+                    if (in_array($submitName, $turnstileSubmitsValues)) {
+                        $submitsActive[$submitName] = $turnstileAction;
+                    }
+                }
+
+                return $submitsActive;
+            }
         }
 
         return false;
+    }
+
+    private function setControllerRules() {
+        $this->turnstile_controllers = [
+            'ContactController' => [
+                'submitMessage' => 'ContactForm',
+            ],
+            'AuthController' => [
+                'SubmitCreate' => 'CreateAccount',
+                'SubmitLogin' => 'Login',
+            ],
+        ];
     }
 
     private function validateFormSubmitToken() {

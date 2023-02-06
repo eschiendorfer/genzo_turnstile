@@ -131,6 +131,14 @@ class Genzo_Turnstile extends Module
                         'name'  => 'turnstile_action',
                     ],
                 ],
+                [
+                    'type'     => 'text',
+                    'label'    => $this->l('Custom Submits'),
+                    'name'     => 'turnstile_submits_custom',
+                    'desc'     => $this->l('Add custom forms (for example from modules), that you want to be checked before submission. For that you need to add the "submit name" of a form.').' '.
+                                  $this->l('Use Browser Inspection, select the submit button and search for the "name" value. (Example: submitGenzoQuestion,postReview)'),
+                    'hint'     => $this->l('Multiple values should be separated by ,'),
+                ],
             ],
             'submit' => [
                 'title' => $this->l('Save'),
@@ -147,6 +155,7 @@ class Genzo_Turnstile extends Module
             'turnstile_site_key' => Configuration::get('GENZO_TURNSTILE_SITE_KEY'),
             'turnstile_secret_key' => Configuration::get('GENZO_TURNSTILE_SECRET_KEY'),
             'turnstile_if_logged' => Configuration::get('GENZO_TURNSTILE_IF_LOGGED'),
+            'turnstile_submits_custom' => Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM'),
         ];
 
         if (!empty($turnstileSubmitsValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS')))) {
@@ -174,6 +183,7 @@ class Genzo_Turnstile extends Module
         return Configuration::updateValue('GENZO_TURNSTILE_SITE_KEY', Tools::getValue('turnstile_site_key')) &&
             Configuration::updateValue('GENZO_TURNSTILE_SECRET_KEY', Tools::getValue('turnstile_secret_key')) &&
             Configuration::updateValue('GENZO_TURNSTILE_IF_LOGGED', Tools::getValue('turnstile_if_logged')) &&
+            Configuration::updateValue('GENZO_TURNSTILE_SUBMITS_CUSTOM', Tools::getValue('turnstile_submits_custom')) &&
             Configuration::updateValue('GENZO_TURNSTILE_SUBMITS', implode(',', $turnstileSubmitsActive));
     }
 
@@ -209,7 +219,16 @@ class Genzo_Turnstile extends Module
         }
 
         // Get active submits (BO configuration)
+        $submitsActive = [];
+
         $turnstileSubmitsValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS'));
+
+        // Add custom submits to the active array (note: customs submits aren't checked for controller)
+        if (!empty($turnstileSubmitsCustomValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM')))) {
+            foreach ($turnstileSubmitsCustomValues as $customSubmitName) {
+                $submitsActive[$customSubmitName] = $customSubmitName;
+            }
+        }
 
         foreach ($this->turnstile_controllers as $instance => $submitsToCheck) {
 
@@ -228,7 +247,7 @@ class Genzo_Turnstile extends Module
             }
         }
 
-        return false;
+        return $submitsActive;
     }
 
     private function setControllerRules() {

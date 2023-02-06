@@ -10,7 +10,13 @@ document.addEventListener("DOMContentLoaded", function () {
                 div.style.margin = '25px 0 0 0';
                 div.setAttribute('data-action', submitsToCheck[submitToCheck]);
 
-                button.insertAdjacentElement('beforebegin', div);
+                var where = 'beforebegin';
+
+                if (submitToCheck==='add_question') {
+                    where = 'afterend'; // Todo: add a clean way to define position/css rules
+                }
+
+                button.insertAdjacentElement(where, div);
             }
         }
     }

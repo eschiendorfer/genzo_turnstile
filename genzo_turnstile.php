@@ -158,10 +158,9 @@ class Genzo_Turnstile extends Module
             'turnstile_submits_custom' => Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM'),
         ];
 
-        if (!empty($turnstileSubmitsValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS')))) {
-            foreach ($turnstileSubmitsValues as $submitName) {
-                $helper->fields_value['turnstile_submits_'.$submitName] = true;
-            }
+        $turnstileSubmitsValues = explode(',', (string)Configuration::get('GENZO_TURNSTILE_SUBMITS'));
+        foreach ($turnstileSubmitsValues as $submitName) {
+            $helper->fields_value['turnstile_submits_'.$submitName] = true;
         }
 
         return $helper->generateForm($fieldsForm);
@@ -221,13 +220,12 @@ class Genzo_Turnstile extends Module
         // Get active submits (BO configuration)
         $submitsActive = [];
 
-        $turnstileSubmitsValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS'));
+        $turnstileSubmitsValues = explode(',', (string)Configuration::get('GENZO_TURNSTILE_SUBMITS'));
 
         // Add custom submits to the active array (note: customs submits aren't checked for controller)
-        if (!empty($turnstileSubmitsCustomValues = explode(',', Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM')))) {
-            foreach ($turnstileSubmitsCustomValues as $customSubmitName) {
-                $submitsActive[$customSubmitName] = $customSubmitName;
-            }
+        $turnstileSubmitsCustomValues = explode(',', (string)Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM'));
+        foreach ($turnstileSubmitsCustomValues as $customSubmitName) {
+            $submitsActive[$customSubmitName] = $customSubmitName;
         }
 
         foreach ($this->turnstile_controllers as $instance => $submitsToCheck) {

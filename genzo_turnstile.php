@@ -25,7 +25,7 @@ class Genzo_Turnstile extends Module
 		$this->tab = 'front_office_features';
 		$this->version = '1.0.0';
 		$this->author = 'Emanuel Schiendorfer';
-		$this->need_instance = 0;
+		$this->need_instance = 1;
 
 		$this->bootstrap = true;
 
@@ -41,6 +41,10 @@ class Genzo_Turnstile extends Module
         $this->turnstile_if_logged = Configuration::get('GENZO_TURNSTILE_IF_LOGGED');
 
         $this->setControllerRules();
+
+        if (! $this->isTurnstileConfigured()) {
+            $this->warning = $this->l('Site or Secret key is not set');
+        }
 	}
 
 	public function install() {
@@ -188,6 +192,9 @@ class Genzo_Turnstile extends Module
 
     //Hooks
     public function hookActionFrontControllerSetMedia() {
+        if (! $this->isTurnstileConfigured()) {
+            return;
+        }
 
         if ($submitsToCheck = $this->checkIfControllerNeedsValidation()) {
 
@@ -207,7 +214,10 @@ class Genzo_Turnstile extends Module
     }
 
     public function hookDisplayFooter() {
-        return '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce="strict-dynamic"></script>';
+        if ($this->isTurnstileConfigured()) {
+            return '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce="strict-dynamic"></script>';
+        }
+        return '';
     }
 
     private function checkIfControllerNeedsValidation() {
@@ -281,6 +291,16 @@ class Genzo_Turnstile extends Module
         }
 
         return false;
+    }
+
+    /**
+     * Returns true, if turnstile is configured properly.
+     *
+     * @return bool
+     */
+    protected function isTurnstileConfigured()
+    {
+        return $this->turnstile_site_key && $this->turnstile_secret_key;
     }
 
 }

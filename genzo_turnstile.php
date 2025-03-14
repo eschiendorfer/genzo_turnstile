@@ -1,10 +1,10 @@
 <?php
 
 /**
- * Copyright (C) 2023 Emanuel Schiendorfer
+ * Copyright (C) 2025 Emanuel Schiendorfer
  *
  * @author    Emanuel Schiendorfer <https://github.com/eschiendorfer>
- * @copyright 2023 Emanuel Schiendorfer
+ * @copyright 2025 Emanuel Schiendorfer
  * @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
  */
 
@@ -23,7 +23,7 @@ class Genzo_Turnstile extends Module
 	function __construct() {
 		$this->name = 'genzo_turnstile';
 		$this->tab = 'front_office_features';
-		$this->version = '1.0.0';
+		$this->version = '1.1.0';
 		$this->author = 'Emanuel Schiendorfer';
 		$this->need_instance = 1;
 
@@ -49,8 +49,7 @@ class Genzo_Turnstile extends Module
 
 	public function install() {
 		if (!parent::install() OR
-            !$this->registerHook('actionFrontControllerSetMedia') OR
-            !$this->registerHook('displayFooter')
+            !$this->registerHook('actionFrontControllerSetMedia')
         ) {
             return false;
         }
@@ -127,7 +126,7 @@ class Genzo_Turnstile extends Module
                 ],
                 [
                     'type'   => 'checkbox',
-                    'label'  => $this->l('Active Submits'),
+                    'label'  => $this->l('Default Submits'),
                     'name'   => 'turnstile_submits',
                     'values' => [
                         'query' => $turnstileSubmits,
@@ -136,11 +135,37 @@ class Genzo_Turnstile extends Module
                     ],
                 ],
                 [
+                    'type' => 'switch',
+                    'label' => $this->l('Default submits on input'),
+                    'desc'  => $this->l('Do you want to the default submits load only, if user is typing into to the textfield.'),
+                    'name' => 'turnstile_on_input',
+                    'is_bool' => true,
+                    'values' => array(
+                        array(
+                            'id' => 'active_on',
+                            'value' => 1,
+                            'label' => $this->l('Yes')
+                        ),
+                        array(
+                            'id' => 'active_off',
+                            'value' => 0,
+                            'label' => $this->l('No')
+                        )
+                    ),
+                ],
+                [
                     'type'     => 'text',
                     'label'    => $this->l('Custom Submits'),
                     'name'     => 'turnstile_submits_custom',
                     'desc'     => $this->l('Add custom forms (for example from modules), that you want to be checked before submission. For that you need to add the "submit name" of a form.').' '.
                                   $this->l('Use Browser Inspection, select the submit button and search for the "name" value. (Example: submitGenzoQuestion,postReview)'),
+                    'hint'     => $this->l('Multiple values should be separated by ,'),
+                ],
+                [
+                    'type'     => 'text',
+                    'label'    => $this->l('Custom Submits on input'),
+                    'name'     => 'turnstile_submits_custom_input',
+                    'desc'     => $this->l('Compared to \'custom Submits\' the spam protection for these inputs will only be loaded, if user is typing into to the textfield.'),
                     'hint'     => $this->l('Multiple values should be separated by ,'),
                 ],
             ],
@@ -159,7 +184,9 @@ class Genzo_Turnstile extends Module
             'turnstile_site_key' => Configuration::get('GENZO_TURNSTILE_SITE_KEY'),
             'turnstile_secret_key' => Configuration::get('GENZO_TURNSTILE_SECRET_KEY'),
             'turnstile_if_logged' => Configuration::get('GENZO_TURNSTILE_IF_LOGGED'),
+            'turnstile_on_input'  => Configuration::get('GENZO_TURNSTILE_ON_INPUT'),
             'turnstile_submits_custom' => Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM'),
+            'turnstile_submits_custom_input' => Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM_INPUT'),
         ];
 
         $turnstileSubmitsValues = explode(',', (string)Configuration::get('GENZO_TURNSTILE_SUBMITS'));
@@ -186,38 +213,48 @@ class Genzo_Turnstile extends Module
         return Configuration::updateValue('GENZO_TURNSTILE_SITE_KEY', Tools::getValue('turnstile_site_key')) &&
             Configuration::updateValue('GENZO_TURNSTILE_SECRET_KEY', Tools::getValue('turnstile_secret_key')) &&
             Configuration::updateValue('GENZO_TURNSTILE_IF_LOGGED', Tools::getValue('turnstile_if_logged')) &&
+            Configuration::updateValue('GENZO_TURNSTILE_ON_INPUT', Tools::getValue('turnstile_on_input')) &&
             Configuration::updateValue('GENZO_TURNSTILE_SUBMITS_CUSTOM', Tools::getValue('turnstile_submits_custom')) &&
+            Configuration::updateValue('GENZO_TURNSTILE_SUBMITS_CUSTOM_INPUT', Tools::getValue('turnstile_submits_custom_input')) &&
             Configuration::updateValue('GENZO_TURNSTILE_SUBMITS', implode(',', $turnstileSubmitsActive));
     }
 
     //Hooks
     public function hookActionFrontControllerSetMedia() {
-        if (! $this->isTurnstileConfigured()) {
-            return;
-        }
+        $this->validatePostValues();
+    }
 
-        if ($submitsToCheck = $this->checkIfControllerNeedsValidation()) {
+    private function validatePostValues() {
 
-            Media::addJsDef(['turnstileSiteKey' => $this->turnstile_site_key, 'submitsToCheck' => $submitsToCheck]);
-            $this->context->controller->addJS($this->_path.'/views/js/genzo_turnstile.js');
+        $turnstileActive = false;
 
-            foreach ($submitsToCheck as $submitToCheck => $action) {
-                if (Tools::isSubmit($submitToCheck)) {
-                    if (!$this->validateFormSubmitToken()) {
-                        unset($_POST[$submitToCheck]);
-                        $this->context->controller->errors[] = $this->l('Captcha Validation failed');
+        if ($this->isTurnstileConfigured()) {
+            if ($submitsToCheck = $this->checkIfControllerNeedsValidation()) {
+                $turnstileActive = true;
+                Media::addJsDef(['turnstileSiteKey' => $this->turnstile_site_key, 'submitsToCheck' => $submitsToCheck]);
+                $this->context->controller->addJS($this->_path . '/views/js/genzo_turnstile.js');
+
+                foreach ($submitsToCheck as $submitToCheck => $action) {
+                    if (Tools::isSubmit($submitToCheck)) {
+                        if (!$this->validateFormSubmitToken()) {
+
+                            if (isset($_POST[$submitToCheck])) {
+                                unset($_POST[$submitToCheck]);
+                            }
+
+                            // Tools::isSubmit() checks for GET values as well
+                            if (isset($_GET[$submitToCheck])) {
+                                unset($_GET[$submitToCheck]);
+                            }
+
+                            $this->context->controller->errors[] = $this->l('Captcha Validation failed');
+                        }
                     }
                 }
             }
         }
 
-    }
-
-    public function hookDisplayFooter() {
-        if ($this->isTurnstileConfigured()) {
-            return '<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer nonce="strict-dynamic"></script>';
-        }
-        return '';
+        Media::addJsDef(['turnstileActive' => $turnstileActive]);
     }
 
     private function checkIfControllerNeedsValidation() {
@@ -234,8 +271,18 @@ class Genzo_Turnstile extends Module
 
         // Add custom submits to the active array (note: customs submits aren't checked for controller)
         $turnstileSubmitsCustomValues = explode(',', (string)Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM'));
+
         foreach ($turnstileSubmitsCustomValues as $customSubmitName) {
-            $submitsActive[$customSubmitName] = $customSubmitName;
+            $submitsActive[$customSubmitName] = true; // autoload
+        }
+
+        // // Add custom submits on input to the active array (note: customs submits aren't checked for controller)
+        $turnstileSubmitsCustomValuesInput = explode(',', (string)Configuration::get('GENZO_TURNSTILE_SUBMITS_CUSTOM_INPUT'));
+
+        foreach ($turnstileSubmitsCustomValuesInput as $customSubmitInputName) {
+            if (!empty($submitsActive[$customSubmitInputName])) {
+                $submitsActive[$customSubmitInputName] = false; // autoload
+            }
         }
 
         foreach ($this->turnstile_controllers as $instance => $submitsToCheck) {
@@ -247,7 +294,7 @@ class Genzo_Turnstile extends Module
                 // Check if the current controller has any active validations
                 foreach ($submitsToCheck as $submitName => $turnstileAction) {
                     if (in_array($submitName, $turnstileSubmitsValues)) {
-                        $submitsActive[$submitName] = $turnstileAction;
+                        $submitsActive[$submitName] = !Configuration::get('GENZO_TURNSTILE_ON_INPUT'); // autoload
                     }
                 }
 

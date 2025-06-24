@@ -345,8 +345,7 @@ class Genzo_Turnstile extends Module
      *
      * @return bool
      */
-    protected function isTurnstileConfigured()
-    {
+    protected function isTurnstileConfigured() {
         return $this->turnstile_site_key && $this->turnstile_secret_key;
     }
 

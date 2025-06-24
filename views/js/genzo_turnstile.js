@@ -19,6 +19,7 @@ function loadCloudflareFile() {
     if (document.querySelector('script[src="' + src + '"]') === null) {
         var script = document.createElement('script');
         script.src = src;
+        script.crossOrigin = 'anonymous';
         script.defer = true;
         script.async = true;
         script.onload = function () {
@@ -157,4 +158,3 @@ function getElementAfterTurnstileWidget(form) {
 
     return button;
 }
-
